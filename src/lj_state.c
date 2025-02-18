@@ -30,6 +30,9 @@
 #include "lj_alloc.h"
 #include "luajit.h"
 
+#include "sys/mman.h"
+#include "stdio.h"
+
 /* -- Stack handling ------------------------------------------------------ */
 
 /* Stack sizes. */
@@ -259,7 +262,19 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
     allocf = lj_alloc_f;
   }
 #endif
-  GG = (GG_State *)allocf(allocd, NULL, 0, sizeof(GG_State));
+  // @BL - malloc a specific desired address, so that we more easly can trace access
+  void* desired = (void*)0xc0de000000;
+  munmap(desired, sizeof(GG_State));
+  void* addr = mmap(desired, sizeof(GG_State), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS|MAP_FIXED, -1, 0);
+
+  if (addr == MAP_FAILED) {
+    perror("Failed to map GG_State to desired address");
+    exit(-1);
+  }
+
+  GG = (GG_State *)addr;
+  //GG = (GG_State *)allocf(allocd, NULL, 0, sizeof(GG_State));
+
   if (GG == NULL || !checkptrGC(GG)) return NULL;
   memset(GG, 0, sizeof(GG_State));
   L = &GG->L;
